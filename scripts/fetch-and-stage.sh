@@ -33,7 +33,7 @@ deb_filename() {
 
 echo "== 3. download python + all Depends libs =="
 # python's Depends (from Termux Packages) covers the C-extension closure.
-PKGS="python gdbm libandroid-posix-semaphore libandroid-support libbz2 libcrypt libexpat libffi liblzma libsqlite ncurses ncurses-ui-libs openssl readline zlib zstd"
+PKGS="python gdbm libandroid-posix-semaphore libandroid-support libbz2 libcrypt libexpat libffi liblzma libsqlite ncurses ncurses-ui-libs openssl readline zlib zstd ca-certificates"
 mkdir -p "$WORK/ext"
 for pkg in $PKGS; do
   fn="$(deb_filename "$pkg")"
@@ -103,6 +103,16 @@ while queue:
 PYEOF
 
 find "$ASSETS" -type d -empty -delete 2>/dev/null || true
+
+echo "== 7b. stage CA root bundle =="
+CERT="$(find "$WORK/ext" -type f -path '*/etc/tls/cert.pem' | head -1)"
+if [ -n "$CERT" ]; then
+  cp "$CERT" "$ASSETS/lib/cert.pem"
+  echo "  cert.pem: $(du -h "$ASSETS/lib/cert.pem" | cut -f1) ($(grep -c 'BEGIN CERTIFICATE' "$ASSETS/lib/cert.pem") roots)"
+else
+  echo "  !! cert.pem not found - HTTPS to upstream will fail"
+  exit 1
+fi
 
 echo "== 8. summary =="
 du -sh "$ASSETS/app" "$ASSETS/bin" "$ASSETS/lib" 2>/dev/null || true

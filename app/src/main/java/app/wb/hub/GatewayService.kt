@@ -107,6 +107,10 @@ class GatewayService : Service() {
             pb.directory(srcDir)
             val env = pb.environment()
             env["LD_LIBRARY_PATH"] = libDir.absolutePath
+            // Bundled CPython comes from Termux and has its OpenSSL CA dir compiled to
+            // a Termux path that does not exist here. Point it at our bundled roots.
+            val certFile = File(libDir, "cert.pem")
+            if (certFile.exists()) env["SSL_CERT_FILE"] = certFile.absolutePath
             env["HOME"] = filesDir.canonicalPath
             env["TMPDIR"] = tmpDir.canonicalPath
             env["PYTHONUNBUFFERED"] = "1"
