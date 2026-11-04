@@ -72,7 +72,7 @@ while IFS= read -r src; do
     *) continue ;;           # skip engines-3/, ossl-modules/, python3.14/ subtree
   esac
   cp -Lf "$src" "$ASSETS/lib/$(basename "$src")"
-done < <(find "$WORK/ext" -maxdepth 99 -path '*/usr/lib/*' -type f \( -name '*.so' -o -name '*.so.*' \) 2>/dev/null)
+done < <(find "$WORK/ext" -maxdepth 99 -path '*/usr/lib/*' ! -type d \( -name '*.so' -o -name '*.so.*' \) 2>/dev/null)
 echo "  staged libs: $(ls "$ASSETS/lib"/*.so* 2>/dev/null | wc -l)"
 
 echo "== 7. recursive NEEDED closure top-up for every staged .so =="
