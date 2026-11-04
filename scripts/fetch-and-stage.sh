@@ -61,69 +61,46 @@ rm -rf "$ASSETS/lib/python3.14/test" "$ASSETS/lib/python3.14/idlelib" \
        "$ASSETS/lib/python3.14/tkinter" "$ASSETS/lib/python3.14/turtledemo" \
        "$ASSETS/lib/python3.14/ensurepip" 2>/dev/null || true
 
-echo "== 6. stage libpython + recursive NEEDED closure =="
-copy_needed() {
-  declare -A SEEN
-  local queue=("$ASSETS/bin/python3.14")
-  # libpython is dlopened by the launcher; seed it explicitly
-  local lp
-  lp="$(find "$WORK/ext" -type f -name 'libpython3.14.so*' | head -1)"
-  if [ -n "$lp" ]; then cp -L "$lp" "$ASSETS/lib/"; queue+=("$ASSETS/lib/libpython3.14.so"); echo "  + libpython"; fi
-  local q2
-  q2="$(find "$WORK/ext" -type f -name 'libpython3.so*' | head -1)"
-  [ -n "$q2" ] && { cp -L "$q2" "$ASSETS/lib/"; echo "  + libpython3.so"; }
+echo "== 6. stage ALL shared libs from extracted debs =="
+# Termux debs unpack to ./data/data/com.termux/files/usr/lib/...
+# Copy every top-level .so / .so.* so the C-extension closure is complete.
+mkdir -p "$ASSETS/lib"
+while IFS= read -r src; do
+  dir="$(dirname "$src")"
+  case "$dir" in
+    */usr/lib) ;;            # only libraries directly in usr/lib/
+    *) continue ;;           # skip engines-3/, ossl-modules/, python3.14/ subtree
+  esac
+  cp -Lf "$src" "$ASSETS/lib/$(basename "$src")"
+done < <(find "$WORK/ext" -maxdepth 99 -path '*/usr/lib/*' -type f \( -name '*.so' -o -name '*.so.*' \) 2>/dev/null)
+echo "  staged libs: $(ls "$ASSETS/lib"/*.so* 2>/dev/null | wc -l)"
 
-  while [ ${#queue[@]} -gt 0 ]; do
-    local f="${queue[0]}"; queue=("${queue[@]:1}")
-    local so
-    while IFS= read -r so; do
-      [ -z "$so" ] && continue
-      [ -n "${SEEN[$so]:-}" ] && continue
-      SEEN[$so]=1
-      # already staged?
-      [ -e "$ASSETS/lib/$so" ] && continue
-      local src
-      src="$(find "$WORK/ext" -path '*/usr/lib/*' -name "$so" 2>/dev/null | head -1)"
-      if [ -n "$src" ]; then
-        cp -L "$src" "$ASSETS/lib/$so"; queue+=("$ASSETS/lib/$so"); echo "  + $so"
-      else
-        echo "  . $so (system-provided)"
-      fi
-    done < <(readelf -d "$f" 2>/dev/null | sed -n 's/.*NEEDED.*\[\(.*\)\]/\1/p')
-  done
-}
-copy_needed
-
-echo "== 7. also stage lib-dynload C-extension deps =="
-DYN="$ASSETS/lib/python3.14/lib-dynload"
-if [ -d "$DYN" ]; then
-  python3 - "$ASSETS/lib" "$WORK/ext" <<'PY'
+echo "== 7. recursive NEEDED closure top-up for every staged .so =="
+python3 - "$ASSETS/lib" "$WORK/ext" <<'PYEOF'
 import os, subprocess, sys, shutil
 libdir, ext = sys.argv[1], sys.argv[2]
-dyn = os.path.join(libdir, "python3.14", "lib-dynload")
 need, seen = [], set()
-for root, _, files in os.walk(dyn):
-    for fn in files:
-        if not fn.endswith(".so"): continue
-        out = subprocess.run(["readelf","-d",os.path.join(root,fn)], capture_output=True, text=True).stdout
-        for line in out.splitlines():
-            if "NEEDED" in line and "[" in line:
-                so = line.split("[",1)[1].split("]",1)[0]
-                if so not in seen: seen.add(so); need.append(so)
-# find each in ext tree and copy if not already present
-for so in need:
-    dst = os.path.join(libdir, so)
-    if os.path.exists(dst): continue
-    found = None
-    for root, _, files in os.walk(ext):
-        if "/usr/lib/" in root and so in files:
-            found = os.path.join(root, so); break
-    if found:
-        shutil.copyfile(found, dst); print("  +", so)
-    else:
-        print("  .", so, "(system)")
-PY
-fi
+def needed(path):
+    out = subprocess.run(["readelf","-d",path], capture_output=True, text=True).stdout
+    return [l.split("[",1)[1].split("]",1)[0] for l in out.splitlines() if "NEEDED" in l and "[" in l]
+queue = [os.path.join(libdir,f) for f in os.listdir(libdir)]
+while queue:
+    f = queue.pop(0)
+    for so in needed(f):
+        if so in seen: continue
+        seen.add(so)
+        dst = os.path.join(libdir, so)
+        if os.path.exists(dst):
+            queue.append(dst); continue
+        found = None
+        for root,_,files in os.walk(ext):
+            if os.path.basename(root) == "lib" and so in files:
+                found = os.path.join(root, so); break
+        if found:
+            shutil.copyfile(found, dst); queue.append(dst); print("  +", so)
+        else:
+            print("  .", so, "(system)")
+PYEOF
 
 find "$ASSETS" -type d -empty -delete 2>/dev/null || true
 

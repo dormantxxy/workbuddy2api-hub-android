@@ -46,17 +46,20 @@ jobs:
           APK=app/build/outputs/apk/release/app-release.apk
           echo "APK size: $(du -h "$APK" | cut -f1)"
           unzip -l "$APK" > apk.txt
-          echo "--- asset entries ---"
-          grep -E "assets/(bin|lib|app)" apk.txt | head -20 || true
           fail=0
           grep -q "assets/bin/python3.14" apk.txt || { echo "MISSING python3.14 binary"; fail=1; }
           grep -q "assets/lib/libpython3.14.so" apk.txt || { echo "MISSING libpython3.14.so"; fail=1; }
           grep -q "assets/lib/python3.14/os.py" apk.txt || { echo "MISSING stdlib"; fail=1; }
           grep -q "assets/app/wb_proxy.py" apk.txt || { echo "MISSING wb_proxy.py"; fail=1; }
           grep -q "assets/app/dashboard.html" apk.txt || { echo "MISSING dashboard.html"; fail=1; }
-          n=$(grep -c "assets/lib/.*\\.so" apk.txt || true)
-          echo "shared libs in apk: $n"
-          [ "$n" -ge 10 ] || { echo "TOO FEW shared libs: $n"; fail=1; }
+          # top-level libs only (no subdir) - the real closure the loader needs
+          top=$(grep -cE "assets/lib/[^/]+\.so[^/]*$" apk.txt || true)
+          echo "top-level shared libs: $top"
+          for L in libssl.so.3 libcrypto.so.3 libz.so.1 libsqlite3.so libexpat.so.1 libffi.so liblzma.so.5 libbz2.so.1.0 libandroid-support.so; do
+            grep -qE "assets/lib/$L$" apk.txt || { echo "MISSING lib: $L"; fail=1; }
+          done
+          [ "$top" -ge 15 ] || { echo "TOO FEW top-level libs: $top"; fail=1; }
+          echo "dynload modules: $(grep -c 'lib-dynload/' apk.txt || true)"
           [ "$fail" -eq 0 ] || exit 1
           echo "RUNTIME OK"
 
