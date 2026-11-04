@@ -1,0 +1,42 @@
+plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
+
+android {
+    namespace 'app.wb.hub'
+    compileSdk 34
+
+    // Fixed self-signed key committed in repo => every CI build uses the SAME
+    // signing cert, so a new APK installs OVER the old one (accounts/data kept).
+    signingConfigs {
+        release {
+            storeFile file('keystore/wb.p12')
+            storeType 'PKCS12'
+            storePassword 'ofmupdate'
+            keyAlias 'ofm'
+            keyPassword 'ofmupdate'
+        }
+    }
+
+    defaultConfig {
+        applicationId 'app.wb.hub'
+        minSdk 24
+        // MUST stay <=28: Android 10+ forbids exec of binaries from app data dir.
+        targetSdk 28
+        versionCode (System.getenv('GITHUB_RUN_NUMBER')?.toInteger() ?: 1)
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug { }
+    }
+
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    kotlinOptions { jvmTarget = '17' }
+    lint { checkReleaseBuilds = false; abortOnError = false }
+}
+
+dependencies { }
