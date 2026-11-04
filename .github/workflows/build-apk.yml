@@ -52,6 +52,9 @@ jobs:
           grep -q "assets/lib/python3.14/os.py" apk.txt || { echo "MISSING stdlib"; fail=1; }
           grep -q "assets/app/wb_proxy.py" apk.txt || { echo "MISSING wb_proxy.py"; fail=1; }
           grep -q "assets/app/dashboard.html" apk.txt || { echo "MISSING dashboard.html"; fail=1; }
+          # underscore-prefixed dirs are silently dropped by AGP unless aaptOptions is overridden
+          grep -q "assets/lib/python3.14/compression/_common/_streams.py" apk.txt || { echo "MISSING compression/_common"; fail=1; }
+          grep -q "assets/lib/python3.14/zipfile/_path/glob.py" apk.txt || { echo "MISSING zipfile/_path"; fail=1; }
           # top-level libs only (no subdir) - the real closure the loader needs
           top=$(grep -cE "assets/lib/[^/]+\.so[^/]*$" apk.txt || true)
           echo "top-level shared libs: $top"

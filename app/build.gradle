@@ -37,6 +37,14 @@ android {
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }
     lint { checkReleaseBuilds = false; abortOnError = false }
+
+    // CRITICAL: AGP's default ignoreAssetsPattern contains "<dir>_*", which silently
+    // DROPS every assets directory whose name starts with "_". Python 3.14 keeps real
+    // code in such dirs (compression/_common, zipfile/_path, _pyrepl, __phello__),
+    // so the packaged runtime would be broken. Ship the full tree instead.
+    aaptOptions {
+        ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
 }
 
 dependencies { }
