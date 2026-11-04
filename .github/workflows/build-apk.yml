@@ -40,6 +40,26 @@ jobs:
       - name: Build signed release APK
         run: gradle :app:assembleRelease --no-daemon --stacktrace
 
+      - name: Verify staged runtime is inside the APK
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          echo "APK size: $(du -h "$APK" | cut -f1)"
+          unzip -l "$APK" > apk.txt
+          echo "--- asset entries ---"
+          grep -E "assets/(bin|lib|app)" apk.txt | head -20 || true
+          fail=0
+          grep -q "assets/bin/python3.14" apk.txt || { echo "MISSING python3.14 binary"; fail=1; }
+          grep -q "assets/lib/libpython3.14.so" apk.txt || { echo "MISSING libpython3.14.so"; fail=1; }
+          grep -q "assets/lib/python3.14/os.py" apk.txt || { echo "MISSING stdlib"; fail=1; }
+          grep -q "assets/app/wb_proxy.py" apk.txt || { echo "MISSING wb_proxy.py"; fail=1; }
+          grep -q "assets/app/dashboard.html" apk.txt || { echo "MISSING dashboard.html"; fail=1; }
+          n=$(grep -c "assets/lib/.*\\.so" apk.txt || true)
+          echo "shared libs in apk: $n"
+          [ "$n" -ge 10 ] || { echo "TOO FEW shared libs: $n"; fail=1; }
+          [ "$fail" -eq 0 ] || exit 1
+          echo "RUNTIME OK"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
